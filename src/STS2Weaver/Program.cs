@@ -11,20 +11,27 @@
 //   postfix           → 每个 return 点插入调用(经单出口改写)
 //   钩子参数绑定: __instance → this; __result / ref __result → 返回值局部变量;
 //                 其余按参数名匹配原方法参数(支持 ref)
-// 不支持: transpiler / finalizer / __state / ___field 注入 / 泛型目标 / 重载目标 — 遇到即报错退出。
+// 不支持: transpiler / finalizer / __state / ___field 注入 / 泛型目标 — 遇到即报错退出。
+// 重载目标可通过 manifest targetParams 或 HarmonyPatch 的 Type[] 参数静态消歧。
 
 using System.Text.Json;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 
+bool harmonyMode = args.Length == 4 && args[0].Equals("harmony", StringComparison.OrdinalIgnoreCase);
 if (args.Length != 4)
 {
-    Console.Error.WriteLine("usage: STS2Weaver <sts2.dll> <hooks.dll> <manifest.json> <output.dll>");
+    Console.Error.WriteLine("usage:");
+    Console.Error.WriteLine("  STS2Weaver <target.dll> <hooks.dll> <manifest.json> <output.dll>");
+    Console.Error.WriteLine("  STS2Weaver harmony <target.dll> <harmony-mod.dll> <output.dll>");
     return 2;
 }
 
-string targetPath = args[0], hooksPath = args[1], manifestPath = args[2], outputPath = args[3];
+string targetPath = args[harmonyMode ? 1 : 0];
+string hooksPath = args[harmonyMode ? 2 : 1];
+string? manifestPath = harmonyMode ? null : args[2];
+string outputPath = args[3];
 
 var resolver = new DefaultAssemblyResolver();
 resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(targetPath)));
@@ -35,9 +42,20 @@ var targetAsm = AssemblyDefinition.ReadAssembly(targetPath, readParams);
 var hooksAsm = AssemblyDefinition.ReadAssembly(hooksPath, readParams);
 var module = targetAsm.MainModule;
 
-var manifest = JsonSerializer.Deserialize<Manifest>(File.ReadAllText(manifestPath),
-    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-    ?? throw new InvalidOperationException("manifest 解析失败");
+Manifest manifest;
+try
+{
+    manifest = harmonyMode
+        ? HarmonyPatchDiscovery.Discover(hooksAsm)
+        : JsonSerializer.Deserialize<Manifest>(File.ReadAllText(manifestPath!),
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+            ?? throw new InvalidOperationException("manifest 解析失败");
+}
+catch (Exception e)
+{
+    Console.Error.WriteLine($"[FAIL] 补丁分析失败: {e.Message}");
+    return 1;
+}
 
 // stripReadonly: 去掉指定静态字段的 initonly 标记(否则 .NET8 运行时反射 SetValue 会抛 FieldAccessException)
 foreach (var s in manifest.StripReadonly ?? new())
@@ -188,7 +206,7 @@ void WeaveOne(PatchEntry p)
     var returnsValue = target.ReturnType.MetadataType != MetadataType.Void;
 
     // __result 局部变量(按需创建)
-    VariableDefinition resultVar = null;
+    VariableDefinition? resultVar = null;
     VariableDefinition EnsureResultVar()
     {
         if (!returnsValue) throw new InvalidOperationException("目标方法返回 void,钩子不能绑定 __result");

@@ -1,0 +1,41 @@
+{
+  "patches": [
+    {
+      "targetType": "STS2Weaver.Phase1.FixtureTarget.Calculator",
+      "targetMethod": "GetValue",
+      "kind": "prefix",
+      "hookType": "STS2Weaver.Phase1.FixtureMod.GetValuePatch",
+      "hookMethod": "Prefix"
+    },
+    {
+      "targetType": "STS2Weaver.Phase1.FixtureTarget.Calculator",
+      "targetMethod": "Add",
+      "targetParams": ["System.Int32", "System.Int32"],
+      "kind": "prefix",
+      "hookType": "STS2Weaver.Phase1.FixtureMod.AddPatch",
+      "hookMethod": "Prefix"
+    },
+    {
+      "targetType": "STS2Weaver.Phase1.FixtureTarget.Calculator",
+      "targetMethod": "GetValue",
+      "kind": "postfix",
+      "hookType": "STS2Weaver.Phase1.FixtureMod.GetValuePatch",
+      "hookMethod": "Postfix"
+    },
+    {
+      "targetType": "STS2Weaver.Phase1.FixtureTarget.Calculator",
+      "targetMethod": "Add",
+      "targetParams": ["System.Int32", "System.Int32"],
+      "kind": "postfix",
+      "hookType": "STS2Weaver.Phase1.FixtureMod.AddPatch",
+      "hookMethod": "Postfix"
+    },
+    {
+      "targetType": "STS2Weaver.Phase1.FixtureTarget.Calculator",
+      "targetMethod": "Classify",
+      "kind": "postfix",
+      "hookType": "STS2Weaver.Phase1.FixtureMod.ClassifyPatch",
+      "hookMethod": "Postfix"
+    }
+  ]
+}
