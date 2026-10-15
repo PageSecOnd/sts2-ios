@@ -55,10 +55,44 @@ dotnet run --project src/STS2Weaver -c Release -- \
 grep -q "完成" "$WORK/weave.log" || fail "织入失败，见 $WORK/weave.log"
 ok "织入完成: $WOVEN"
 
+# 可选静态 Mod：继续在游戏副本上织入；永不修改 Steam 原文件。
+# harmony-one 同时写出提升所选私有 hook 可见性的 Mod 副本，供 ILC 静态解析。
+STATIC_MOD_OUT="$WORK/static-mods"
+rm -rf "$STATIC_MOD_OUT"; mkdir -p "$STATIC_MOD_OUT"
+if [ -n "${STS2_STATIC_MOD_DLL:-}" ]; then
+  [ -f "$STS2_STATIC_MOD_DLL" ] || fail "静态 Mod DLL 不存在: $STS2_STATIC_MOD_DLL"
+  [ -n "${STS2_STATIC_MOD_HOOK_TYPE:-}" ] || fail "已设置 STS2_STATIC_MOD_DLL，但缺 STS2_STATIC_MOD_HOOK_TYPE"
+  [ -n "${STS2_STATIC_MOD_HOOK_METHOD:-}" ] || fail "已设置 STS2_STATIC_MOD_DLL，但缺 STS2_STATIC_MOD_HOOK_METHOD"
+  MOD_NAME=$(basename "$STS2_STATIC_MOD_DLL")
+  MOD_WOVEN="$WORK/sts2-static-mod-woven.dll"
+  dotnet run --project src/STS2Weaver -c Release -- \
+    harmony-one "$WOVEN" "$STS2_STATIC_MOD_DLL" \
+    "$STS2_STATIC_MOD_HOOK_TYPE" "$STS2_STATIC_MOD_HOOK_METHOD" \
+    "$MOD_WOVEN" "$STATIC_MOD_OUT/$MOD_NAME" 2>&1 | tee "$WORK/static-mod-weave.log"
+  MODRC=${PIPESTATUS[0]}
+  [ "$MODRC" = "0" ] || fail "静态 Mod 织入失败，见 $WORK/static-mod-weave.log"
+  mv "$MOD_WOVEN" "$WOVEN"
+  ok "静态 Mod 已织入副本: $MOD_NAME ($STS2_STATIC_MOD_HOOK_TYPE.$STS2_STATIC_MOD_HOOK_METHOD)"
+else
+  ok "未配置静态 Mod，保持原无 Mod 构建路径"
+fi
+
 step "2/6 组装 prebuilt/（织入主程序集 + 全部托管依赖）"
 rm -rf "$PREBUILT"; mkdir -p "$PREBUILT/deps"
 cp "$WOVEN" "$PREBUILT/sts2.dll" || fail "拷贝织入 dll 失败"
 cp "$WORK/mobilepatch-out/STS2MobileIos.dll" "$PREBUILT/deps/" || fail "拷贝补丁 dll 失败"
+if [ -n "${STS2_STATIC_MOD_DLL:-}" ]; then
+  cp "$STATIC_MOD_OUT/"*.dll "$PREBUILT/deps/" || fail "拷贝静态 Mod 程序集失败"
+  if [ -n "${STS2_STATIC_MOD_DEPS_DIR:-}" ]; then
+    [ -d "$STS2_STATIC_MOD_DEPS_DIR" ] || fail "静态 Mod 依赖目录不存在: $STS2_STATIC_MOD_DEPS_DIR"
+    for dll in "$STS2_STATIC_MOD_DEPS_DIR"/*.dll; do
+      [ -e "$dll" ] || continue
+      base=$(basename "$dll")
+      case "$base" in sts2.dll|GodotSharp.dll|0Harmony.dll) continue;; esac
+      cp "$dll" "$PREBUILT/deps/$base"
+    done
+  fi
+fi
 # 只拷第三方托管依赖。判定基准 = 框架实际安装的运行时库目录（权威清单，非名字猜测）：
 #   凡在 shared/Microsoft.NETCore.App 里的 = 框架自带（NativeAOT runtime pack 提供）→ 排除
 #   否则 = 第三方库 → 保留（含 System.IO.Hashing 这类名字像框架但其实是 NuGet 包的）
@@ -86,7 +120,8 @@ ok "GDExtension 库就位"
 step "4/6 dotnet publish（NativeAOT 预编译织入程序集 → sts2.framework）"
 cd "$EXPORT_DIR" || fail "cd 失败"
 dotnet publish sts2.csproj -c ExportRelease -r ios-arm64 \
-  -p:GodotTargetPlatform=ios --self-contained \
+  -p:GodotTargetPlatform=ios \
+  -p:StaticModRootAssemblies="${STS2_STATIC_MOD_ROOT_ASSEMBLIES:-}" --self-contained \
   2>&1 | tee "$WORK/publish.log" | grep -E "error CS|error MSB|error :|注入|-> " | tail -20
 # 用真实退出码 + 产物存在判成败（publish.log 里有海量 IL 裁剪 warning，文本含 "error" 子串，不能靠 grep）
 PUBRC=${PIPESTATUS[0]}

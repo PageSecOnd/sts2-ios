@@ -21,6 +21,8 @@ using Mono.Cecil.Rocks;
 
 if (args.Length == 4 && args[0].Equals("analyze-harmony", StringComparison.OrdinalIgnoreCase))
     return HarmonyModAnalyzer.Run(args[1], args[2], args[3]);
+if (args.Length == 4 && args[0].Equals("preflight-aot", StringComparison.OrdinalIgnoreCase))
+    return AotCompatibilityAnalyzer.Run(args[1], args[2], args[3]);
 
 bool harmonyMode = args.Length == 4 && args[0].Equals("harmony", StringComparison.OrdinalIgnoreCase);
 bool harmonyOneMode = args.Length == 7 && args[0].Equals("harmony-one", StringComparison.OrdinalIgnoreCase);
@@ -31,6 +33,7 @@ if (args.Length != 4 && !harmonyOneMode)
     Console.Error.WriteLine("  STS2Weaver harmony <target.dll> <harmony-mod.dll> <output.dll>");
     Console.Error.WriteLine("  STS2Weaver harmony-one <target.dll> <mod.dll> <hook-type> <hook-method> <output-target.dll> <output-mod.dll>");
     Console.Error.WriteLine("  STS2Weaver analyze-harmony <mod.dll> <target.dll> <report.json>");
+    Console.Error.WriteLine("  STS2Weaver preflight-aot <mod.dll> <dependency-dir> <report.json>");
     return 2;
 }
 

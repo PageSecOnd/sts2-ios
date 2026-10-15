@@ -36,6 +36,17 @@ STS2_IOS_LIBS_DIR="$HOME/sts2-ios-userlibs/ios-libs"
 # FMOD iOS 静态库目录，需含: libfmod_iphoneos.a  libfmodstudio_iphoneos.a
 STS2_FMOD_STATIC_DIR="$HOME/sts2-ios-userlibs/fmod-ios/lib"
 
+# ── NativeAOT 静态 Mod（可选；留空保持原无 Mod 构建流程）──
+# 当前接入的是经过 STS2Weaver 验证的单一声明式 Prefix/Postfix。所有路径都必须指向
+# 你本机合法取得的 Mod 文件；产物只写 ios-export/.work 与 prebuilt（均被 gitignore）。
+STS2_STATIC_MOD_DLL=""
+STS2_STATIC_MOD_HOOK_TYPE=""
+STS2_STATIC_MOD_HOOK_METHOD=""
+# hook 直接调用的其它 Mod 程序集目录。不要放游戏本体、0Harmony 或框架程序集。
+STS2_STATIC_MOD_DEPS_DIR=""
+# 可选分号列表。只有完成 AOT 预检的程序集才应整程序集 root；所选 hook 本身由织入调用自动可达。
+STS2_STATIC_MOD_ROOT_ASSEMBLIES=""
+
 # ── 存档同步（可选，仅 sts2_save_sync.sh 用）──
 # 你的 SteamID64（电脑存档目录名）。查询: 游戏内或 steamid.io。
 STS2_STEAM_ID=""

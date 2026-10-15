@@ -36,6 +36,9 @@
   <!-- 补丁库需 root(被织入调用点引用+含反射逻辑); sts2 由 Godot targets root -->
   <ItemGroup>
     <TrimmerRootAssembly Include="STS2MobileIos" />
+    <!-- 可选静态 Mod root 由 build-ios.sh 显式传入；空值时不改变无 Mod 构建。 -->
+    <TrimmerRootAssembly Include="$(StaticModRootAssemblies)"
+                         Condition="'$(StaticModRootAssemblies)' != ''" />
   </ItemGroup>
 
   <!--
