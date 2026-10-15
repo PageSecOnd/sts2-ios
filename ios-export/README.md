@@ -28,7 +28,24 @@
 - `sts2.csproj` / `sts2.sln` — 空源码 + 预编译注入 target
 - `export_presets.cfg` — iOS 导出预设（arm64、两个 GDExtension、pck 策略）
 - `build-ios.sh` — 一键：刷新织入 dll → 注入依赖 → Godot 导出 → 产出 .ipa/Xcode 工程
-- `Directory.Build.props` — 全局 TrimmerRoot 配置
+- `sts2.csproj` — 主程序集替换、ReferencePath 与 TrimmerRoot/descriptor 配置
+
+## 静态 Mod 注册（Phase 4）
+
+代码型 Mod 必须在 ILC 前确定。配置 `STS2_STATIC_MOD_DLL`、选中 hook 和
+`STS2_STATIC_MOD_MANIFEST` 后，`build-ios.sh` 会：
+
+1. 只在 `.work` 的游戏副本上织入 hook；
+2. 校验 manifest 的游戏程序集身份、Mod 版本和依赖拓扑；
+3. 生成 `STS2StaticModRegistry.dll`，其中只有确定的直接类型/方法引用；
+4. 把一次性 `InitializeAll` 调用注入 `sts2.dll` 的模块初始化器；
+5. 生成 `static-mod-roots.xml`，只保留 manifest 声明的反射类型；
+6. 验证 Mod 的托管依赖闭包，再交给现有 `BeforeTargets="IlcCompile"` 注入点。
+
+未配置静态 Mod 时不会生成或注入注册器，原无 Mod 流程不变。注册入口只能做 AOT 安全的
+早期登记；依赖 Godot 场景树或 PCK 的资源初始化必须在后续游戏生命周期阶段执行，不能塞进
+模块初始化器。BaseLib 当前示例仅登记并保留已验证的 GetAngle hook，不执行完整
+`BaseLibMain.Initialize`。
 
 ## 库映射（已验证名字/入口符号匹配游戏要求）
 | 插件 | 游戏要求路径 | 我编出的产物 | 入口符号 |

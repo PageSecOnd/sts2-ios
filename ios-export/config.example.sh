@@ -46,6 +46,9 @@ STS2_STATIC_MOD_HOOK_METHOD=""
 STS2_STATIC_MOD_DEPS_DIR=""
 # 可选分号列表。只有完成 AOT 预检的程序集才应整程序集 root；所选 hook 本身由织入调用自动可达。
 STS2_STATIC_MOD_ROOT_ASSEMBLIES=""
+# 编译期注册清单。建议复制 static-mods.example.json 为 static-mods.json（已忽略）并填入
+# 目标版本/MVID、Mod 依赖、初始化入口和需反射保留的类型。
+STS2_STATIC_MOD_MANIFEST=""
 
 # ── 存档同步（可选，仅 sts2_save_sync.sh 用）──
 # 你的 SteamID64（电脑存档目录名）。查询: 游戏内或 steamid.io。

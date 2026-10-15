@@ -77,21 +77,48 @@ else
   ok "未配置静态 Mod，保持原无 Mod 构建路径"
 fi
 
+# 先把显式 Mod 依赖放入注册器解析目录。这里只接受本地输入，不下载、不上传。
+if [ -n "${STS2_STATIC_MOD_DEPS_DIR:-}" ]; then
+  [ -d "$STS2_STATIC_MOD_DEPS_DIR" ] || fail "静态 Mod 依赖目录不存在: $STS2_STATIC_MOD_DEPS_DIR"
+  for dll in "$STS2_STATIC_MOD_DEPS_DIR"/*.dll; do
+    [ -e "$dll" ] || continue
+    base=$(basename "$dll")
+    case "$base" in sts2.dll|GodotSharp.dll|0Harmony.dll) continue;; esac
+    cp "$dll" "$STATIC_MOD_OUT/$base"
+  done
+fi
+
+# 可选编译期注册表：校验游戏身份和 Mod 依赖，拓扑排序，生成直接调用程序集与精确
+# linker roots，再把一次性调用注入游戏副本的 <Module>..cctor。
+if [ -n "${STS2_STATIC_MOD_MANIFEST:-}" ]; then
+  [ -f "$STS2_STATIC_MOD_MANIFEST" ] || fail "静态 Mod manifest 不存在: $STS2_STATIC_MOD_MANIFEST"
+  REGISTRY="$STATIC_MOD_OUT/STS2StaticModRegistry.dll"
+  ROOTS_XML="$STATIC_MOD_OUT/static-mod-roots.xml"
+  dotnet run --project src/STS2Weaver -c Release -- \
+    static-registry "$STS2_STATIC_MOD_MANIFEST" "$WOVEN" "$STATIC_MOD_OUT" \
+    "$REGISTRY" "$ROOTS_XML" 2>&1 | tee "$WORK/static-mod-registry.log"
+  REGRC=${PIPESTATUS[0]}
+  [ "$REGRC" = "0" ] || fail "静态 Mod 注册表生成失败，见 $WORK/static-mod-registry.log"
+  REG_WOVEN="$WORK/sts2-registry-woven.dll"
+  dotnet run --project src/STS2Weaver -c Release -- \
+    inject-registry "$WOVEN" "$REGISTRY" "$REG_WOVEN" "$GAME_DATA" 2>&1 | tee "$WORK/static-mod-inject.log"
+  INJRC=${PIPESTATUS[0]}
+  [ "$INJRC" = "0" ] || fail "静态 Mod 注册注入失败，见 $WORK/static-mod-inject.log"
+  mv "$REG_WOVEN" "$WOVEN"
+  ok "静态 Mod 注册表已生成并注入（初始化与 hook 均为编译期确定）"
+elif [ -n "${STS2_STATIC_MOD_DLL:-}" ]; then
+  fail "配置了代码型静态 Mod，但缺 STS2_STATIC_MOD_MANIFEST；拒绝产生未登记的 Mod 构建"
+fi
+
 step "2/6 组装 prebuilt/（织入主程序集 + 全部托管依赖）"
 rm -rf "$PREBUILT"; mkdir -p "$PREBUILT/deps"
 cp "$WOVEN" "$PREBUILT/sts2.dll" || fail "拷贝织入 dll 失败"
 cp "$WORK/mobilepatch-out/STS2MobileIos.dll" "$PREBUILT/deps/" || fail "拷贝补丁 dll 失败"
-if [ -n "${STS2_STATIC_MOD_DLL:-}" ]; then
+if compgen -G "$STATIC_MOD_OUT/*.dll" >/dev/null; then
   cp "$STATIC_MOD_OUT/"*.dll "$PREBUILT/deps/" || fail "拷贝静态 Mod 程序集失败"
-  if [ -n "${STS2_STATIC_MOD_DEPS_DIR:-}" ]; then
-    [ -d "$STS2_STATIC_MOD_DEPS_DIR" ] || fail "静态 Mod 依赖目录不存在: $STS2_STATIC_MOD_DEPS_DIR"
-    for dll in "$STS2_STATIC_MOD_DEPS_DIR"/*.dll; do
-      [ -e "$dll" ] || continue
-      base=$(basename "$dll")
-      case "$base" in sts2.dll|GodotSharp.dll|0Harmony.dll) continue;; esac
-      cp "$dll" "$PREBUILT/deps/$base"
-    done
-  fi
+fi
+if [ -f "$STATIC_MOD_OUT/static-mod-roots.xml" ]; then
+  cp "$STATIC_MOD_OUT/static-mod-roots.xml" "$PREBUILT/static-mod-roots.xml"
 fi
 # 只拷第三方托管依赖。判定基准 = 框架实际安装的运行时库目录（权威清单，非名字猜测）：
 #   凡在 shared/Microsoft.NETCore.App 里的 = 框架自带（NativeAOT runtime pack 提供）→ 排除
@@ -108,6 +135,13 @@ done
 DEPCOUNT=$(ls "$PREBUILT/deps" | wc -l | tr -d ' ')
 ok "依赖组装完成: $DEPCOUNT 个第三方托管程序集（按框架清单精确滤除）"
 echo "  保留: $(ls "$PREBUILT/deps" | tr '\n' ' ')"
+if [ -n "${STS2_STATIC_MOD_MANIFEST:-}" ]; then
+  dotnet run --project "$ROOT/src/STS2Weaver" -c Release -- \
+    verify-static-input "$STS2_STATIC_MOD_MANIFEST" "$PREBUILT/deps" "$PREBUILT/deps" \
+    "$WORK/static-mod-input-report.json" 2>&1 | tee "$WORK/static-mod-input-verify.log"
+  VERIFYRC=${PIPESTATUS[0]}
+  [ "$VERIFYRC" = "0" ] || fail "静态 Mod 依赖闭包不完整，见 $WORK/static-mod-input-report.json"
+fi
 
 step "3/6 放置 GDExtension iOS 库到导出工程 addons/"
 ADDONS="$EXPORT_DIR/addons"

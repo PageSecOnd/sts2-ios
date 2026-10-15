@@ -13,7 +13,8 @@
 
 - **服务**（按小时/按天计费，构建一次通常一两小时内，退租即停）：AWS EC2 Mac、MacStadium、MacinCloud、Scaleway Mac mini，以及其它按小时的云 Mac。挑一个能远程桌面/SSH 的即可。
 - **把游戏文件弄上去**：本机 Steam 里的 `SlayTheSpire2.app` 打包，经你自己的网盘 / `scp` 传到云 Mac；FMOD/Spine 库同理。到了之后填 `ios-export/config.sh` 指向它们。
-- **优点**：免费 Apple ID 在 Xcode GUI 里登录就能签，`increased-memory-limit` 能正常注册（这点在无头 CI 上很难，见方案 B）。
+- **优点**：Xcode GUI 能直接显示你的账号/profile 实际允许的 capability，适合核验
+  `increased-memory-limit`。是否获准必须以生成的 provisioning profile 为准，不能仅凭账号类型假定。
 - **缺点**：要花点租金；首次配环境（Xcode、.NET 9、Godot 4.5.1 mono、iOS 导出模板）要些时间。云 Mac 的 Xcode/工具版本尽量对齐本项目环境要求。
 
 ## 方案 B（进阶）：GitHub Actions macOS runner 自动化命令行部分
@@ -22,7 +23,18 @@ GitHub 提供预装 Xcode 的 macOS runner，可把 `build-ios.sh` 的**命令�
 
 1. **游戏文件不能进公共仓库**。用**私有仓库**，游戏文件/库通过加密方式带入——例如从你的私有存储用 `secrets` 里的凭据拉取；或干脆用**自托管 runner**（你自己的机器/云 Mac 当 runner）。
 2. **签名仍需你的 Apple 身份**。免费账号在无头 CI 上签名很别扭。可行做法：CI 只产出**未签名/ad-hoc** 的包，**签名交给手机上的 SideStore**（它用你的 Apple ID 重签，见 [`RENEWAL.md`](RENEWAL.md)）。
-3. **大内存权限**（`increased-memory-limit`）需在你的 App ID 能力里登记，realistically 要**用一次 Xcode**。完全不碰 Xcode 时这个权限较难拿到——这正是方案 A 更省心的原因。
+3. **大内存权限**不能靠重签工具凭空增加。最终 App entitlement 必须与 provisioning profile
+   的授权一致；当前身份能否取得需在 Xcode/Developer Portal 生成 profile 后实查。
+
+### 已实现的公开验证入口
+
+仓库的 [Phase 4 public workflow](../.github/workflows/phase4-ios-nativeaot-public.yml) 固定使用
+`macos-15` ARM64、.NET 9.0.319、Godot 4.5.1 mono 和对应模板，只构建自行创建的公开夹具。
+它验证静态 Mod 注册器、ios-arm64 NativeAOT、Mach-O arm64 和
+`godotsharp_game_main_init`，Artifact 仅含文本日志。它不读取 secrets，也不接收游戏、PCK、
+FMOD、Spine 或签名资产。
+
+该 workflow 必须实际跑绿后才能记录为 iOS AOT 通过；仅提交 YAML 不算成功。
 
 骨架（**模板**，需你自己补私有游戏文件/库/签名，不能原样跑）：
 
@@ -31,7 +43,7 @@ name: build-ios (template)
 on: workflow_dispatch
 jobs:
   build:
-    runs-on: macos-latest          # 预装 Xcode；版本尽量对齐本项目
+    runs-on: macos-15              # 明确的标准 ARM64/M1 runner，不使用 latest
     steps:
       - uses: actions/checkout@v4
       - name: 装依赖
@@ -48,12 +60,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: sts2-build
-          path: ios-export/build      # Xcode 工程 + StS2.pck；signing 交给手机 SideStore
+          path: ios-export/build      # 仅限私有任务；绝不能从公共任务上传游戏/PCK
 ```
 
 ## 结论
 
-- **想省心、一次到位、含大内存权限** → 方案 A（云 Mac），照文档原样走。
+- **想省心、一次到位并实际核验大内存权限** → 方案 A（云 Mac），照文档原样走。
 - **想自动化重复构建、且愿意处理私有文件 + 签名** → 方案 B（GitHub Actions 命令行部分），签名走 SideStore / 自托管 runner。
 
 无论哪条，**游戏文件始终只在你私有的通道里流动**，不进任何公共位置。

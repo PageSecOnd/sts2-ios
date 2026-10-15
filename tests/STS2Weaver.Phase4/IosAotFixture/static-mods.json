@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "assemblyName": "Phase4IosAotFixture",
+    "assemblyVersion": "1.0.0.0"
+  },
+  "mods": [
+    {
+      "id": "dependent",
+      "assembly": "Phase4IosAotFixture.dll",
+      "dependencies": ["foundation"],
+      "initializer": {
+        "type": "Phase4IosAotFixture.DependentModEntry",
+        "method": "Initialize"
+      },
+      "rootTypes": ["Phase4IosAotFixture.ReflectionOnlyContent"]
+    },
+    {
+      "id": "foundation",
+      "assembly": "Phase4IosAotFixture.dll",
+      "dependencies": [],
+      "initializer": {
+        "type": "Phase4IosAotFixture.FoundationModEntry",
+        "method": "Initialize"
+      }
+    }
+  ]
+}

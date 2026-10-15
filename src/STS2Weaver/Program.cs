@@ -23,6 +23,12 @@ if (args.Length == 4 && args[0].Equals("analyze-harmony", StringComparison.Ordin
     return HarmonyModAnalyzer.Run(args[1], args[2], args[3]);
 if (args.Length == 4 && args[0].Equals("preflight-aot", StringComparison.OrdinalIgnoreCase))
     return AotCompatibilityAnalyzer.Run(args[1], args[2], args[3]);
+if (args.Length == 6 && args[0].Equals("static-registry", StringComparison.OrdinalIgnoreCase))
+    return StaticModRegistryBuilder.Build(args[1], args[2], args[3], args[4], args[5]);
+if (args.Length is 4 or 5 && args[0].Equals("inject-registry", StringComparison.OrdinalIgnoreCase))
+    return StaticModRegistryBuilder.Inject(args[1], args[2], args[3], args.Length == 5 ? args[4] : null);
+if (args.Length == 5 && args[0].Equals("verify-static-input", StringComparison.OrdinalIgnoreCase))
+    return StaticModRegistryBuilder.VerifyInputs(args[1], args[2], args[3], args[4]);
 
 bool harmonyMode = args.Length == 4 && args[0].Equals("harmony", StringComparison.OrdinalIgnoreCase);
 bool harmonyOneMode = args.Length == 7 && args[0].Equals("harmony-one", StringComparison.OrdinalIgnoreCase);
@@ -34,6 +40,9 @@ if (args.Length != 4 && !harmonyOneMode)
     Console.Error.WriteLine("  STS2Weaver harmony-one <target.dll> <mod.dll> <hook-type> <hook-method> <output-target.dll> <output-mod.dll>");
     Console.Error.WriteLine("  STS2Weaver analyze-harmony <mod.dll> <target.dll> <report.json>");
     Console.Error.WriteLine("  STS2Weaver preflight-aot <mod.dll> <dependency-dir> <report.json>");
+    Console.Error.WriteLine("  STS2Weaver static-registry <manifest.json> <target.dll> <assembly-dir> <registry.dll> <roots.xml>");
+    Console.Error.WriteLine("  STS2Weaver inject-registry <target.dll> <registry.dll> <output-target.dll> [dependency-dir]");
+    Console.Error.WriteLine("  STS2Weaver verify-static-input <manifest.json> <mod-dir> <game-deps-dir> <report.json>");
     return 2;
 }
 

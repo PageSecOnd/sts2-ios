@@ -1,0 +1,113 @@
+name: Phase 4 public iOS NativeAOT validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/phase4-ios-nativeaot-public.yml'
+      - 'src/STS2Weaver/**'
+      - 'tests/STS2Weaver.Phase4/IosAotFixture/**'
+
+permissions:
+  contents: read
+
+jobs:
+  ios-nativeaot-public-fixture:
+    # GitHub's documented standard Apple-silicon label; deliberately not *-latest.
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GODOT_VERSION: 4.5.1-stable
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      FIXTURE: tests/STS2Weaver.Phase4/IosAotFixture
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.319
+
+      - name: Verify pinned Apple and .NET toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p phase4-public-logs
+          uname -a | tee phase4-public-logs/uname.txt
+          test "$(uname -m)" = "arm64"
+          xcodebuild -version | tee phase4-public-logs/xcode.txt
+          xcrun --sdk iphoneos --show-sdk-path | tee phase4-public-logs/iphoneos-sdk.txt
+          xcrun --sdk iphoneos --show-sdk-version | tee phase4-public-logs/iphoneos-sdk-version.txt
+          dotnet --info | tee phase4-public-logs/dotnet-info.txt
+          test "$(dotnet --version)" = "9.0.319"
+
+      - name: Install and verify Godot 4.5.1 mono plus export templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}"
+          curl --fail --location --retry 3 \
+            "$base/Godot_v${GODOT_VERSION}_mono_macos.universal.zip" -o /tmp/godot.zip
+          curl --fail --location --retry 3 \
+            "$base/Godot_v${GODOT_VERSION}_mono_export_templates.tpz" -o /tmp/templates.tpz
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          godot_bin="$(find /tmp/godot -path '*/Godot_mono.app/Contents/MacOS/Godot' -type f | head -1)"
+          test -n "$godot_bin"
+          chmod +x "$godot_bin"
+          "$godot_bin" --version | tee phase4-public-logs/godot-version.txt
+          template_dir="$HOME/Library/Application Support/Godot/export_templates/4.5.1.stable.mono"
+          mkdir -p "$template_dir"
+          unzip -q /tmp/templates.tpz -d /tmp/templates
+          cp -R /tmp/templates/templates/. "$template_dir/"
+          test -f "$template_dir/ios.zip"
+          printf '%s\n' "$godot_bin" > phase4-public-logs/godot-bin.txt
+          du -sh "$template_dir" | tee phase4-public-logs/templates-size.txt
+
+      - name: Generate and inject static Mod registry into public fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build src/STS2Weaver/STS2Weaver.csproj -c Release | tee phase4-public-logs/weaver-build.txt
+          fixture_build="$RUNNER_TEMP/phase4-fixture-build"
+          dotnet build "$FIXTURE/IosAotFixture.csproj" -c Release -o "$fixture_build" | tee phase4-public-logs/fixture-build.txt
+          input="$fixture_build/Phase4IosAotFixture.dll"
+          mkdir -p "$FIXTURE/prebuilt"
+          dotnet run --project src/STS2Weaver/STS2Weaver.csproj -c Release --no-build -- \
+            static-registry "$FIXTURE/static-mods.json" "$input" "$(dirname "$input")" \
+            "$FIXTURE/prebuilt/STS2StaticModRegistry.dll" "$FIXTURE/prebuilt/static-mod-roots.xml" \
+            | tee phase4-public-logs/registry.txt
+          dotnet run --project src/STS2Weaver/STS2Weaver.csproj -c Release --no-build -- \
+            inject-registry "$input" "$FIXTURE/prebuilt/STS2StaticModRegistry.dll" \
+            "$FIXTURE/prebuilt/Phase4IosAotFixture.dll" "$fixture_build" | tee phase4-public-logs/inject.txt
+
+      - name: Publish ios-arm64 NativeAOT and inspect Mach-O
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/phase4-ios-publish"
+          dotnet publish "$FIXTURE/IosAotFixture.csproj" -c Release -r ios-arm64 \
+            -p:GodotTargetPlatform=ios -p:UseWovenFixture=true --self-contained true -o "$out" \
+            | tee phase4-public-logs/ios-publish.txt
+          dylib="$out/Phase4IosAotFixture.dylib"
+          test -f "$dylib"
+          file "$dylib" | tee phase4-public-logs/file.txt
+          lipo -archs "$dylib" | tee phase4-public-logs/architectures.txt
+          test "$(lipo -archs "$dylib")" = "arm64"
+          nm -gU "$dylib" | tee phase4-public-logs/exported-symbols.txt
+          grep -q 'godotsharp_game_main_init' phase4-public-logs/exported-symbols.txt
+          otool -L "$dylib" | tee phase4-public-logs/load-commands.txt
+          if grep -Eiq 'mono|coreclr' phase4-public-logs/load-commands.txt; then
+            echo 'Unexpected JIT runtime dependency' >&2
+            exit 1
+          fi
+          stat -f '%z bytes' "$dylib" | tee phase4-public-logs/native-size.txt
+
+      - name: Upload public diagnostics only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-public-ios-nativeaot-diagnostics
+          path: phase4-public-logs/
+          if-no-files-found: error
+          retention-days: 14

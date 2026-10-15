@@ -29,7 +29,9 @@ ios-export/build/
 
 # --- 本地配置（含你的签名身份，绝不提交）---
 ios-export/config.sh
+ios-export/static-mods.json
 ios-export/.work/
+tests/STS2Weaver.Phase4/IosAotFixture/prebuilt/
 
 # --- 本地/临时 ---
 .DS_Store

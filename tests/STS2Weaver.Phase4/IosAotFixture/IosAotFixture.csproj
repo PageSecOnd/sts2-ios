@@ -1,0 +1,25 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>Phase4IosAotFixture</AssemblyName>
+    <RootNamespace>Phase4IosAotFixture</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <WovenAssembly>$(MSBuildProjectDirectory)/prebuilt/Phase4IosAotFixture.dll</WovenAssembly>
+    <RegistryAssembly>$(MSBuildProjectDirectory)/prebuilt/STS2StaticModRegistry.dll</RegistryAssembly>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseWovenFixture)' == 'true'">
+    <Reference Include="STS2StaticModRegistry" HintPath="$(RegistryAssembly)" Private="true" />
+    <TrimmerRootDescriptor Include="$(MSBuildProjectDirectory)/prebuilt/static-mod-roots.xml" />
+  </ItemGroup>
+
+  <Target Name="InjectWovenFixture" AfterTargets="CoreCompile" BeforeTargets="IlcCompile"
+          Condition="'$(UseWovenFixture)' == 'true'">
+    <Error Condition="!Exists('$(WovenAssembly)')" Text="缺少 Phase 4 织入 fixture: $(WovenAssembly)" />
+    <Copy SourceFiles="$(WovenAssembly)" DestinationFiles="$(IntermediateOutputPath)$(TargetName).dll"
+          OverwriteReadOnlyFiles="true" />
+    <Copy SourceFiles="$(WovenAssembly)" DestinationFiles="$(TargetPath)"
+          OverwriteReadOnlyFiles="true" />
+  </Target>
+</Project>

@@ -39,6 +39,9 @@
     <!-- 可选静态 Mod root 由 build-ios.sh 显式传入；空值时不改变无 Mod 构建。 -->
     <TrimmerRootAssembly Include="$(StaticModRootAssemblies)"
                          Condition="'$(StaticModRootAssemblies)' != ''" />
+    <!-- 生成式注册清单对确需反射访问的 Mod 类型做精确保留，避免整 Mod root。 -->
+    <TrimmerRootDescriptor Include="$(PrebuiltDir)/static-mod-roots.xml"
+                           Condition="Exists('$(PrebuiltDir)/static-mod-roots.xml')" />
   </ItemGroup>
 
   <!--

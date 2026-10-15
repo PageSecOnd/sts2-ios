@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "assemblyName": "sts2",
+    "assemblyVersion": "0.1.0.0",
+    "moduleVersionId": "REPLACE-WITH-MVID-FROM-YOUR-OWN-GAME-ASSEMBLY"
+  },
+  "mods": [
+    {
+      "id": "BaseLib.GetAngle.SelectedPatch",
+      "assembly": "BaseLib.dll",
+      "assemblyVersion": "3.4.7.0",
+      "dependencies": [],
+      "rootTypes": [
+        "BaseLib.Patches.Hooks.HandPosHelperGetPositionPatch"
+      ]
+    }
+  ]
+}
