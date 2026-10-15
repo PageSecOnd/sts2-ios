@@ -19,19 +19,26 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 
+if (args.Length == 4 && args[0].Equals("analyze-harmony", StringComparison.OrdinalIgnoreCase))
+    return HarmonyModAnalyzer.Run(args[1], args[2], args[3]);
+
 bool harmonyMode = args.Length == 4 && args[0].Equals("harmony", StringComparison.OrdinalIgnoreCase);
-if (args.Length != 4)
+bool harmonyOneMode = args.Length == 7 && args[0].Equals("harmony-one", StringComparison.OrdinalIgnoreCase);
+if (args.Length != 4 && !harmonyOneMode)
 {
     Console.Error.WriteLine("usage:");
     Console.Error.WriteLine("  STS2Weaver <target.dll> <hooks.dll> <manifest.json> <output.dll>");
     Console.Error.WriteLine("  STS2Weaver harmony <target.dll> <harmony-mod.dll> <output.dll>");
+    Console.Error.WriteLine("  STS2Weaver harmony-one <target.dll> <mod.dll> <hook-type> <hook-method> <output-target.dll> <output-mod.dll>");
+    Console.Error.WriteLine("  STS2Weaver analyze-harmony <mod.dll> <target.dll> <report.json>");
     return 2;
 }
 
-string targetPath = args[harmonyMode ? 1 : 0];
-string hooksPath = args[harmonyMode ? 2 : 1];
-string? manifestPath = harmonyMode ? null : args[2];
-string outputPath = args[3];
+string targetPath = args[harmonyMode || harmonyOneMode ? 1 : 0];
+string hooksPath = args[harmonyMode || harmonyOneMode ? 2 : 1];
+string? manifestPath = harmonyMode || harmonyOneMode ? null : args[2];
+string outputPath = harmonyOneMode ? args[5] : args[3];
+string? hooksOutputPath = harmonyOneMode ? args[6] : null;
 
 var resolver = new DefaultAssemblyResolver();
 resolver.AddSearchDirectory(Path.GetDirectoryName(Path.GetFullPath(targetPath)));
@@ -45,16 +52,25 @@ var module = targetAsm.MainModule;
 Manifest manifest;
 try
 {
-    manifest = harmonyMode
-        ? HarmonyPatchDiscovery.Discover(hooksAsm)
+    manifest = harmonyMode || harmonyOneMode
+        ? HarmonyPatchDiscovery.Discover(hooksAsm,
+            harmonyOneMode ? args[3] : null,
+            harmonyOneMode ? args[4] : null)
         : JsonSerializer.Deserialize<Manifest>(File.ReadAllText(manifestPath!),
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
             ?? throw new InvalidOperationException("manifest 解析失败");
 }
+
 catch (Exception e)
 {
     Console.Error.WriteLine($"[FAIL] 补丁分析失败: {e.Message}");
     return 1;
+}
+
+if (harmonyOneMode)
+{
+    var selected = manifest.Patches.Single();
+    PromoteHookForStaticCall(selected);
 }
 
 // stripReadonly: 去掉指定静态字段的 initonly 标记(否则 .NET8 运行时反射 SetValue 会抛 FieldAccessException)
@@ -161,8 +177,30 @@ if (failed > 0)
 }
 
 targetAsm.Write(outputPath);
+if (hooksOutputPath != null)
+    hooksAsm.Write(hooksOutputPath);
 Console.WriteLine($"完成: {woven} 处织入 → {outputPath}");
+if (hooksOutputPath != null)
+    Console.WriteLine($"完成: 已提升所选 hook 可见性的 Mod 副本 → {hooksOutputPath}");
 return 0;
+
+void PromoteHookForStaticCall(PatchEntry patch)
+{
+    var type = hooksAsm.MainModule.GetType(patch.HookType)
+        ?? throw new InvalidOperationException($"钩子类型不存在: {patch.HookType}");
+    var method = type.Methods.SingleOrDefault(x => x.Name == patch.HookMethod && x.IsStatic)
+        ?? throw new InvalidOperationException($"钩子方法不存在或非 static: {patch.HookMethod}");
+
+    method.IsPublic = true;
+    for (TypeDefinition? current = type; current != null; current = current.DeclaringType)
+    {
+        if (current.IsNested)
+            current.IsNestedPublic = true;
+        else
+            current.IsPublic = true;
+    }
+    Console.WriteLine($"[OK] promote {patch.HookType}.{patch.HookMethod}（仅写入独立 Mod 副本）");
+}
 
 void WeaveOne(PatchEntry p)
 {

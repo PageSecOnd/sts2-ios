@@ -58,7 +58,7 @@ public static class AddPatch
 [HarmonyPatch(typeof(Calculator), nameof(Calculator.Classify))]
 public static class ClassifyPatch
 {
-    [HarmonyPostfix]
+    // 故意省略 [HarmonyPostfix]，验证 Harmony 的方法名约定也能被静态发现。
     public static void Postfix(Calculator __instance, int value, ref int __result)
     {
         PatchState.PostfixCalls++;

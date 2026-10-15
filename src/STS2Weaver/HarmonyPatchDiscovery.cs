@@ -14,7 +14,7 @@ static class HarmonyPatchDiscovery
     private const string HarmonyTargetMethod = "HarmonyLib.HarmonyTargetMethod";
     private const string HarmonyTargetMethods = "HarmonyLib.HarmonyTargetMethods";
 
-    public static Manifest Discover(AssemblyDefinition modAssembly)
+    public static Manifest Discover(AssemblyDefinition modAssembly, string? selectedHookType = null, string? selectedHookMethod = null)
     {
         var patches = new List<PatchEntry>();
         var errors = new List<string>();
@@ -24,16 +24,26 @@ static class HarmonyPatchDiscovery
             bool isPatchContainer = HasAttribute(type, HarmonyPatch);
             foreach (var method in type.Methods)
             {
-                if (HasAttribute(method, HarmonyTranspiler))
+                if (selectedHookType != null
+                    && (type.FullName != selectedHookType || method.Name != selectedHookMethod))
+                    continue;
+                bool conventionPatchMethod = isPatchContainer || HasAttribute(method, HarmonyPatch);
+                bool isTranspiler = HasAttribute(method, HarmonyTranspiler)
+                    || (conventionPatchMethod && method.Name == "Transpiler");
+                bool isFinalizer = HasAttribute(method, HarmonyFinalizer)
+                    || (conventionPatchMethod && method.Name == "Finalizer");
+                if (isTranspiler)
                     errors.Add($"{type.FullName}.{method.Name}: Transpiler 依赖任意 IL 变换，Phase 1 不支持；需人工改写为静态 Cecil 补丁");
-                if (HasAttribute(method, HarmonyFinalizer))
+                if (isFinalizer)
                     errors.Add($"{type.FullName}.{method.Name}: Finalizer 依赖异常路径语义，Phase 1 不支持；需人工适配异常处理块");
                 if (HasAttribute(method, HarmonyTargetMethod) || HasAttribute(method, HarmonyTargetMethods)
                     || (isPatchContainer && method.Name is "TargetMethod" or "TargetMethods"))
                     errors.Add($"{type.FullName}.{method.Name}: 动态 TargetMethod/TargetMethods 不会在构建期执行；请改用声明式 [HarmonyPatch(typeof(...), nameof(...))]");
 
-                bool isPrefix = HasAttribute(method, HarmonyPrefix);
-                bool isPostfix = HasAttribute(method, HarmonyPostfix);
+                bool isPrefix = HasAttribute(method, HarmonyPrefix)
+                    || (conventionPatchMethod && method.Name == "Prefix");
+                bool isPostfix = HasAttribute(method, HarmonyPostfix)
+                    || (conventionPatchMethod && method.Name == "Postfix");
                 if (!isPrefix && !isPostfix) continue;
                 if (isPrefix && isPostfix)
                 {
@@ -63,7 +73,9 @@ static class HarmonyPatchDiscovery
             throw new InvalidOperationException("Harmony 分析发现不兼容补丁:" + Environment.NewLine
                 + string.Join(Environment.NewLine, errors.Select(x => "  - " + x)));
         if (patches.Count == 0)
-            throw new InvalidOperationException("未发现带 [HarmonyPrefix] 或 [HarmonyPostfix] 的方法");
+            throw new InvalidOperationException(selectedHookType == null
+                ? "未发现带 [HarmonyPrefix] 或 [HarmonyPostfix] 的方法"
+                : $"未发现所选 Harmony hook: {selectedHookType}.{selectedHookMethod}");
 
         // 先织入所有 Prefix，再织入 Postfix。这样 bool Prefix 的提前 ret 也会被随后建立的
         // Postfix 单出口捕获，保持 Harmony 的“跳过原方法但仍执行 Postfix”语义。
