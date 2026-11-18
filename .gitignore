@@ -37,5 +37,6 @@ tests/STS2Weaver.Phase4/IosAotFixture/prebuilt/
 .DS_Store
 *.log
 logs_*.zip
+phase4-public-ios-nativeaot-diagnostics*.zip
 *.pid
 save_backups/

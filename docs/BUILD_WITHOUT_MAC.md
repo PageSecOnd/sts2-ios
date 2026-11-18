@@ -34,7 +34,10 @@ GitHub 提供预装 Xcode 的 macOS runner，可把 `build-ios.sh` 的**命令�
 `godotsharp_game_main_init`，Artifact 仅含文本日志。它不读取 secrets，也不接收游戏、PCK、
 FMOD、Spine 或签名资产。
 
-该 workflow 必须实际跑绿后才能记录为 iOS AOT 通过；仅提交 YAML 不算成功。
+该 workflow 已在用户 Fork 上实际跑绿：公开 fixture 成功生成 arm64 Mach-O NativeAOT dylib，
+保留 `godotsharp_game_main_init`，且没有 Mono/CoreCLR 动态依赖。它仍只证明公开 AOT 夹具，
+不等于真实游戏、Xcode 工程、IPA、签名或真机运行成功。完整证据与警告见
+[`PHASE4_IOS_STATIC_MOD_INTEGRATION.md`](PHASE4_IOS_STATIC_MOD_INTEGRATION.md#公开-macos-arm64-验证)。
 
 骨架（**模板**，需你自己补私有游戏文件/库/签名，不能原样跑）：
 

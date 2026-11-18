@@ -75,10 +75,37 @@ Windows 真实输入脚本会输出同形目录并再次运行 NativeAOT，但�
 - 没有 Mono/CoreCLR 动态依赖；
 - Artifact 只保存文本日志，不保存 dylib。
 
-当前 Windows 会话不能执行该 workflow，也没有权限擅自 push 或启动远程任务。因此 YAML 是
-已实现但尚未实际运行的入口，不能记作 ios-arm64 编译通过。GitHub 标准 `macos-15` 当前是
-3 核 M1、7 GB RAM、14 GB SSD；完整游戏 ILC 很可能超过其资源，届时应改用私有/自托管 Mac
-或 `macos-15-xlarge`，而不是删减诊断后宣称成功。规格来源：
+该 workflow 已在用户 Fork 的 GitHub Actions 上实际运行通过。下载的诊断 Artifact 已在本地
+核验（ZIP SHA-256：`DB5B8C50E101D9F0899D1B548D9BBFD700C1CFA692E5ACC73D745C1918180321`），
+结果如下：
+
+- Runner：macOS 15.8 / ARM64；Xcode 16.4；iPhoneOS SDK 18.5；
+- .NET SDK：9.0.319（`global.json` 固定选择），Godot：
+  `4.5.1.stable.mono.official.f62fdbde1`；
+- 静态注册顺序为 `foundation -> dependent`，注册器成功生成，`InitializeAll` 成功注入公开
+  fixture 的模块初始化器；
+- `dotnet publish -r ios-arm64` 成功生成 19,778,032 字节的
+  `Phase4IosAotFixture.dylib`；
+- `file`/`lipo` 确认产物为 `Mach-O 64-bit dynamically linked shared library arm64`；
+- `nm` 确认导出 `_godotsharp_game_main_init`；
+- `otool -L` 只列出 iOS 系统、Swift、Foundation、Security 等依赖，没有 Mono 或 CoreCLR。
+
+这证明公开 fixture 的静态 Mod 注册代码确实进入了 ios-arm64 NativeAOT 产物，但没有证明该
+dylib 已被 Godot Xcode 工程打包或在真机执行。Artifact 按设计只含文本诊断，不含 dylib。
+
+成功构建仍有两组待处理警告：
+
+1. `Microsoft.DotNet.ILCompiler` 9.0.21 触发 `NU1903`，对应高严重性公告
+   `GHSA-p3jp-9v83-76w9`。在确认 Godot 4.5.1 与更新 .NET 9 runtime patch 的兼容性前，不能
+   把该结果描述为无已知风险；
+2. Godot 4.5.1 的 `DelegateUtils`、`ScriptManagerBridge` 等代码触发 IL2026、IL207x、IL3050、
+   IL2055 等 trimming/AOT 警告。公开 fixture 成功链接不代表真实游戏用到的所有反射、泛型
+   实例化路径都可运行，必须继续通过真实输入和真机覆盖。
+
+此外，链接器报告 iOS 最低版本参数 12.0 被 target 12.2 覆盖，且 `-ld_classic` 已弃用；当前
+均未阻塞 dylib 生成。GitHub 标准 `macos-15` 当前是 3 核 M1、7 GB RAM、14 GB SSD；完整游戏
+ILC 很可能超过其资源，届时应改用私有/自托管 Mac 或 `macos-15-xlarge`，而不是删减诊断后
+宣称成功。规格来源：
 [GitHub-hosted runners reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。
 
 ## FMOD、Spine 与真实游戏私有构建
