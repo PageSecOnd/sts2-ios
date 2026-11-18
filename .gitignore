@@ -6,6 +6,7 @@ sts2*.dll
 sts2*.decompiled.*
 game-refs/
 extracted/
+SlayTheSpire2.app/
 
 # --- 第三方专有库（各自去官网下载）---
 fmod-ios/

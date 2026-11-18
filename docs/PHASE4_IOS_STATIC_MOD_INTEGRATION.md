@@ -57,10 +57,37 @@ STS2Weaver verify-static-input manifest.json mod-dir game-deps-dir report.json
 不设置 `STS2_STATIC_MOD_DLL` 和 `STS2_STATIC_MOD_MANIFEST` 时，脚本明确走无 Mod 路径。设置代码
 Mod 却不提供 manifest 会失败，防止出现“hook 织入了但 Mod 未登记”的半成品。
 
-Windows 真实输入脚本会输出同形目录并再次运行 NativeAOT，但本机只有
-`data_sts2_windows_x86_64`，没有 `data_sts2_macos_arm64`，所以两个平台的 MVID/SHA256 尚不能
-比较。macOS 构建必须针对 Mac 版 `sts2.dll` 重新织入并重新解析 manifest；不能把 Windows
-原生库带进 iOS。托管程序集即使同名也必须由 manifest 身份检查确认。
+Windows 真实输入脚本会输出同形目录并再次运行 NativeAOT。Phase 4 初次实现时本机只有
+`data_sts2_windows_x86_64`；后续取得正版 macOS 输入后的比较结果见下节。macOS 构建必须针对
+Mac 版 `sts2.dll` 重新织入并重新解析 manifest；不能把 Windows 原生库带进 iOS。托管程序集
+即使同名也必须由 manifest 身份检查确认。
+
+### 本地 macOS 正版输入核验
+
+用户随后通过自己的 Steam 账户取得了 `SlayTheSpire2.app`，并在 Windows 上进行只读核验。
+三个 `sts2.dll` 都是 `net9.0`、程序集版本 `0.1.0.0`，且 informational version 都指向同一
+源码提交 `cc1f9462ca6c602e88f83f3bd7e2d084d4d4f8d7`，但二进制身份不同：
+
+| 输入 | MVID | SHA-256 |
+|---|---|---|
+| Windows x86_64 | `a5742661-f95f-4ba1-8b21-18dedf86422b` | `3FB1FA1BF0249087B706A5D0F062A60579E2F5B08DF4EE477DDD6F2607F654D5` |
+| macOS arm64 | `4e00c689-5bff-4363-9263-83dc46c745fa` | `0DBA5816282C6483D9305032ACBE1A9BE1E5E31B505421834EF7D1E786C19ABF` |
+| macOS x86_64 | `c2396e62-a406-4c65-bd30-28862dad0ddc` | `0CEFAF68A7D1225EA40D79802B89BD5F41129C5BEB366B560A5D6D690CA36C67` |
+
+这验证了“Mod 托管 DLL 可跨平台重新分析”，也验证了“已织入的游戏 DLL 不可跨平台复用”。
+针对当前 Workshop BaseLib 3.4.8.0 的真实审计在 macOS arm64 目标上识别出 344 个 Harmony
+补丁方法（147 Prefix、148 Postfix、49 Transpiler）。其中 25 个使用动态目标，当前矩阵为
+18 个直接支持、170 个需提升 hook 可见性、156 个不支持。
+
+`BaseLib.Patches.Hooks.HandPosHelperGetPositionPatch.GetAngle` 已重新解析到：
+
+```text
+System.Single MegaCrit.Sts2.Core.Helpers.HandPosHelper::GetAngle(System.Int32,System.Int32)
+```
+
+现有 `harmony-one` 已把该真实 Prefix 成功织入 macOS arm64 `sts2.dll` 的独立工作副本，并只在
+独立 BaseLib 副本中提升 hook 可见性；Steam/macOS 原件 SHA-256 复核未变化。该结果属于真实
+macOS 托管程序集静态转换成功，尚不等于完整 BaseLib 初始化、ios-arm64 ILC 或真机行为成功。
 
 ## 公开 macOS ARM64 验证
 
