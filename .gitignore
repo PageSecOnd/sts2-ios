@@ -36,5 +36,6 @@ tests/STS2Weaver.Phase4/IosAotFixture/prebuilt/
 # --- 本地/临时 ---
 .DS_Store
 *.log
+logs_*.zip
 *.pid
 save_backups/
